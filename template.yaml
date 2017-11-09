@@ -1,0 +1,52 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: lambda function to tag DynamoDB tables with a Name tag where the value is the name, along with a CWE to run the function once a day. 
+Resources:
+  ddbNameTagger:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: tag_ddb_table_w_name.handler 
+      Runtime: python2.7
+      CodeUri: . 
+      Policies: 
+        - Version: '2012-10-17' 
+          Statement:
+            - 
+              Effect: "Allow"
+              Action:
+                - "dynamodb:DescribeTable"
+                - "dynamodb:ListTables"
+                - "dynamodb:ListTagsOfResource"
+                - "dynamodb:TagResource"
+                - "dynamodb:UntagResource"
+              Resource: '*'
+      Description: function that tags a newly created DynamoDB Table with a Name tag
+      MemorySize: 128
+      Timeout: 3
+  CreateTableRule: 
+    Type: "AWS::Events::Rule"
+    Properties: 
+      Description: "DynamoDB CreateTable CWE Rule"
+      EventPattern: 
+        source: 
+          - "aws.dynamodb" 
+        detail-type:  
+          - "AWS API Call via CloudTrail"  
+        detail:  
+          eventSource: 
+            - "dynamodb.amazonaws.com" 
+          eventName: 
+            - "CreateTable"
+      State: "ENABLED"
+      Targets: 
+        - 
+          Arn: !GetAtt ddbNameTagger.Arn
+          Id: "ddb_tagger"
+  PermissionForEventsToInvokeLambda: 
+    Type: "AWS::Lambda::Permission"
+    Properties: 
+      FunctionName: 
+        Ref: "ddbNameTagger"
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt CreateTableRule.Arn
